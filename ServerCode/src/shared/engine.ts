@@ -32,9 +32,11 @@ function initialState(roomId: string, hostId: string): FullState {
     lastPlayerId: '',
     turnPlayerId: '',
     passedPlayerIds: [],
+    trickCycle: 0,
     claimQueue: [],
     claimIndex: 0,
     firstLeadMode: 'diamond3',
+    dealStartPlayerId: '',
     prevRoundRemaining: [],
     finishedOrder: [],
     upstreamPlayerId: '',
@@ -98,6 +100,7 @@ export class GameEngine {
     this.state.teams.A.matchScore = 0;
     this.state.teams.B.matchScore = 0;
     this.state.roundNo = 0;
+    this.state.dealStartPlayerId = '';
     this.state.prevRoundRemaining = [];
     this.state.seq++;
     return { ok: true };
@@ -125,11 +128,18 @@ export class GameEngine {
 
   private deal(): void {
     const s = this.state;
+    // s.roundNo 仍是上一局编号（下面才 ++），为 0 即一场游戏的首局
+    const isFirstRound = s.roundNo === 0;
     s.combinedSeed = combineSeeds(Object.values(s.seeds));
     s.shuffledDeck = seededShuffle(makeDeck(GAME.DECK_COUNT), s.combinedSeed);
     s.proof = { seed: s.combinedSeed, commitment: hashString(s.combinedSeed) };
     s.players = R.assignSeats(this.entries, s.combinedSeed, s.hostId);
-    s.hands = R.dealCards(s.shuffledDeck, s.players);
+    // 发牌起点（已确认）：首局座位 0；之后从上一局输家中未出完牌者起，
+    // 多人时用本局公开种子确定性随机一人，保证验牌可复算
+    s.dealStartPlayerId = isFirstRound
+      ? ''
+      : R.pickDealStarter(s.prevRoundRemaining, s.combinedSeed);
+    s.hands = R.dealCards(s.shuffledDeck, s.players, s.dealStartPlayerId);
     for (const p of s.players) p.handCount = s.hands[p.id].length;
 
     s.roundNo++;
@@ -140,11 +150,12 @@ export class GameEngine {
     s.lastPlayerId = '';
     s.turnPlayerId = '';
     s.passedPlayerIds = [];
+    s.trickCycle = 0;
     s.finishedOrder = [];
     s.upstreamPlayerId = '';
     s.winnerTeam = null;
     s.lastRoundResult = null;
-    s.firstLeadMode = s.roundNo === 1 ? 'diamond3' : 'askLoser';
+    s.firstLeadMode = isFirstRound ? 'diamond3' : 'askLoser';
     s.claimQueue = s.firstLeadMode === 'askLoser'
       ? R.buildClaimQueue(s.prevRoundRemaining, s.combinedSeed)
       : [];
@@ -209,7 +220,7 @@ export class GameEngine {
     if (s.phase !== 'playing') return '当前不是出牌阶段';
     if (expectedSeq !== undefined && expectedSeq !== s.seq) return '状态版本已过期，请刷新';
     if (s.turnPlayerId !== playerId) return '还没轮到你';
-    if (s.passedPlayerIds.includes(playerId)) return '本回合已 pass，不能再出牌';
+    if (s.passedPlayerIds.includes(playerId)) return '本轮已 pass，等有人压过或本回合结束后才能再出';
     return null;
   }
 
@@ -239,6 +250,10 @@ export class GameEngine {
       playerId, cards, comboType: combo.type, comboLabel: describeCombo(combo),
     };
     s.lastPlayerId = playerId;
+    // 每产生一手新的「要压过的牌」就开启一个新压制轮：
+    // pass 只在上一轮内有效，之前 pass 的人重新获得出牌权（2026-11-11 第五轮确认）
+    s.passedPlayerIds = [];
+    s.trickCycle = (s.trickCycle ?? 0) + 1;
     const p = s.players.find((x) => x.id === playerId);
     if (p) p.handCount = s.hands[playerId].length;
     const events = [`${this.nickname(playerId)} 打出 ${combo.label}`];
@@ -267,7 +282,7 @@ export class GameEngine {
     if (!s.currentPlay) return { ok: false, events: [], error: '本回合首出不能 pass' };
     s.passedPlayerIds.push(playerId);
     s.seq++;
-    const events = [`${this.nickname(playerId)} 不要`];
+    const events = [`${this.nickname(playerId)} 不要（第 ${s.trickCycle} 轮）`];
     this.advanceTurn(events);
     return { ok: true, events };
   }
@@ -292,8 +307,8 @@ export class GameEngine {
 
   /**
    * 按出牌顺序（顺时针）找下一可出牌者。
-   * 已出完牌的人被跳过；已 pass 的人本回合不再有出牌权。
-   * 只要还有人能出牌且没 pass，回合就继续（已确认「任一有牌下家压住即可」）。
+   * 已出完牌的人被跳过；**当前压制轮内**已 pass 的人跳过（有人压过时名单会被清空）。
+   * 只要本轮还有人没 pass，回合就继续；一圈全 pass 才结算（已确认「任一有牌下家压住即可」）。
    */
   private advanceTurn(events: string[]): void {
     const s = this.state;
@@ -326,6 +341,7 @@ export class GameEngine {
     s.pot = [];
     s.currentPlay = null;
     s.passedPlayerIds = [];
+    s.trickCycle = 0;
 
     const leader = s.lastPlayerId;
     const leaderFinished = (s.hands[leader]?.length ?? 0) === 0;
@@ -420,10 +436,12 @@ export class GameEngine {
       lastPlayerId: s.lastPlayerId,
       turnPlayerId: s.turnPlayerId,
       passedPlayerIds: [...s.passedPlayerIds],
+      trickCycle: s.trickCycle ?? 0,
       claimPlayerId: s.phase === 'claimFirst'
         ? (s.firstLeadMode === 'askLoser' ? (s.claimQueue[s.claimIndex] ?? '') : '')
         : '',
       firstLeadMode: s.firstLeadMode,
+      dealStartPlayerId: s.dealStartPlayerId,
       upstreamPlayerId: s.upstreamPlayerId,
       winnerTeam: s.winnerTeam,
       lastRoundResult: s.lastRoundResult ? { ...s.lastRoundResult } : null,

@@ -36,9 +36,11 @@ export const TURN = {
   settlePotOnRoundEnd: true,
 } as const;
 
-// 另两条已确认的回合语义，直接体现在引擎实现里（不做成开关，避免死配置）：
+// 已确认的回合语义，直接体现在引擎实现里（不做成开关，避免死配置）：
 //  1. 任一有牌下家出牌压住即按顺时针正常继续，只有全 pass 才触发接风（engine.advanceTurn）
 //  2. 接风者开启全新回合、可出任意牌型（engine.settleTrick 清空 currentPlay / passedPlayerIds）
+//  3. pass 只在**当前压制轮**内有效：每产生一手新的「要压过的牌」就清空 pass 名单、
+//     trickCycle +1，之前 pass 的人重新获得出牌权；一圈全 pass 才结束回合（engine.play / rules.isTrickOver）
 
 export const NET = {
   DEFAULT_CLOUD_URL: 'ws://192.168.1.10:8080/ws',
@@ -88,8 +90,11 @@ export const ASSUMPTIONS = {
   matchEndCheck: 'afterRound' as 'afterRound' | 'afterTrick',
   /** 纯王 3 张为特例：只压到同点 3 张；N>=4 张王压到同点 N+2 张 */
   joker3BeatsSame3Only: true,
-  /** 出完牌的玩家跳过回合，不参与 pass 计数；若他赢下回合则触发「接风」（见 TURN） */
+  /** 出完牌的玩家跳过回合，不参与当前压制轮的 pass 计数；若他赢下回合则触发「接风」（见 TURN） */
   skipFinishedPlayers: true,
   /** 队伍座位每场随机打乱一次，局间保持不变 */
   reshuffleSeatsEveryMatch: true,
+  // 三种王对（一对小王 / 一对大王 / 小王+大王）已确认「同级、互不可压」，
+  // 但仍高于所有普通对子。见《规则确认结论.md》3.4，实现在 combo.ts 的 JOKER_PAIR_KEY。
+  // 上一轮的 mixedJokerPairKey 可切换口径已按确认结果收敛，不再保留死配置。
 } as const;

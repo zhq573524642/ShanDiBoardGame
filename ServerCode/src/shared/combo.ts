@@ -12,6 +12,8 @@ import { ASSUMPTIONS } from './constants';
  *  - 炸弹类 sameN(>=3) / 五十K / 纯王：按统一 level 等级链，
  *    高等级可压所有低等级（含全部基础牌型），同级再按各自规则比。
  *  - 纯王 3 张为特例（压到同点 3 张）；N>=4 张王压到同点 N+2 张。
+ *  - 两张王：一对小王 / 一对大王 / 小王+大王 都是合法对子，三者**同级、互不可压**
+ *    （2026-11-11 第四轮确认），但都高于所有普通对子。
  *  - 唯一特例：恰好「AA + 22」这 4 张连对，大于同张数的其他连对。
  */
 
@@ -50,6 +52,13 @@ export const LEVEL = {
   /** 纯王 N 张（N>=4）：压到同点 N+2 张 */
   jokerBomb: (n: number) => 65 + n * 10,
 } as const;
+
+/**
+ * 三种「王对」共用的比较主键。
+ * 普通点数最大为 2（RANK_POWER = 13），这里取 15+1=16，保证王对压得过任意普通对子；
+ * 三者 key 与 subKey 完全相同 → canBeat 返回 false，实现「互不可压，先出者领先」。
+ */
+export const JOKER_PAIR_KEY = RANK_POWER.bJ + 1;
 
 export interface Combo {
   type: ComboType;
@@ -100,10 +109,8 @@ export function parseCombo(cards: Card[]): Combo | null {
       return make(ComboType.SINGLE, 'basic', cards, LEVEL.SINGLE, RANK_POWER[c.rank], SUIT_POWER[c.suit]);
     }
     if (n === 2) {
-      if (cards[0].rank === cards[1].rank) {
-        return make(ComboType.PAIR, 'basic', cards, LEVEL.PAIR, RANK_POWER[cards[0].rank]);
-      }
-      return null;
+      // 一对小王 / 一对大王 / 小王+大王：三种王对同级、互不可压（已确认）
+      return make(ComboType.PAIR, 'basic', cards, LEVEL.PAIR, JOKER_PAIR_KEY);
     }
     const level = ASSUMPTIONS.joker3BeatsSame3Only && n === 3
       ? LEVEL.JOKER_3
@@ -177,6 +184,7 @@ export function canBeat(challenger: Combo, current: Combo | null): boolean {
     if (ASSUMPTIONS.requireSameLengthForSequence
       && (challenger.type === ComboType.STRAIGHT || challenger.type === ComboType.CONSEC_PAIRS)
       && challenger.length !== current.length) return false;
+    // 三种王对 key / subKey 均相同，落到下面「key 相等再比 subKey」自然得到不可互压
   } else if (challenger.family === 'bomb' && current.family === 'bomb') {
     if (challenger.level !== current.level) return challenger.level > current.level;
     if (challenger.type === ComboType.FAKE_50K && !ASSUMPTIONS.fakeFiftyKSameLevelBeats) return false;

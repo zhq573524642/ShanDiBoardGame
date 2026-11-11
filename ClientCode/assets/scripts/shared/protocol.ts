@@ -74,11 +74,16 @@ export interface FullState {
   currentPlay: PlayedCards | null;
   lastPlayerId: string;
   turnPlayerId: string;
+  /** 当前压制轮内已 pass 的玩家；一旦有人压过即清空，所有人重新获得出牌权 */
   passedPlayerIds: string[];
+  /** 本回合第几个压制轮：0 = 尚未领出或回合已结算，领出后为 1，每次被压过 +1 */
+  trickCycle: number;
   claimQueue: string[];
   claimIndex: number;
   firstLeadMode: FirstLeadMode;
-  /** 上一局失败队中、局末手里还有牌的玩家；用于非首局「询问是否先出」 */
+  /** 本局发牌起点玩家 id；空串 = 从座位 0 起（首局） */
+  dealStartPlayerId: string;
+  /** 上一局失败队中、局末手里还有牌的玩家；用于非首局「询问是否先出」与「决定发牌起点」 */
   prevRoundRemaining: string[];
   /** 出完牌的先后顺序，[0] 即全局上游 */
   finishedOrder: string[];
@@ -117,9 +122,14 @@ export interface ViewState {
   currentPlay: PlayedCards | null;
   lastPlayerId: string;
   turnPlayerId: string;
+  /** 当前压制轮内已 pass 的玩家（有人压过即清空） */
   passedPlayerIds: string[];
+  /** 本回合第几个压制轮，供 UI 提示「第 N 轮」 */
+  trickCycle: number;
   claimPlayerId: string;
   firstLeadMode: FirstLeadMode;
+  /** 本局发牌起点玩家 id；空串 = 从座位 0 起（首局），供 UI 提示 */
+  dealStartPlayerId: string;
   upstreamPlayerId: string;
   winnerTeam: TeamId | null;
   lastRoundResult: FullState['lastRoundResult'];

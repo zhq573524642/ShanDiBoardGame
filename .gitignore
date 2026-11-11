@@ -1,0 +1,33 @@
+# Node 依赖与服务端编译产物：换机后由 npm install / npm run build 重新生成
+**/node_modules/
+ServerCode/dist/
+npm-debug.log*
+*.log
+
+# Cocos Creator 3.x 本地生成目录
+# 注意：assets/**/*.meta 必须提交，丢了会导致场景引用全部失效
+ClientCode/library/
+ClientCode/temp/
+ClientCode/local/
+ClientCode/build/
+ClientCode/profiles/
+ClientCode/.creator/
+ClientCode/native/build/
+ClientCode/native/engine/
+
+# Android / Gradle 产物
+**/build/
+**/.gradle/
+**/local.properties
+**/*.apk
+
+# 本机环境与凭据
+.env
+.env.local
+*.keystore
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

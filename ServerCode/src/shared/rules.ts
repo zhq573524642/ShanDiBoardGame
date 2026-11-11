@@ -57,19 +57,45 @@ function hasCards(state: Pick<FullState, 'hands'>, playerId: string): boolean {
   return (state.hands[playerId]?.length ?? 0) > 0;
 }
 
-/** 一次一张轮流发，按出牌顺序（顺时针），6 人 × 36 张正好发完 216 张 */
-export function dealCards(deck: Card[], players: PublicPlayer[]): Record<string, Card[]> {
+/**
+ * 一次一张轮流发，按出牌顺序（顺时针），6 人 × 36 张正好发完 216 张，**无底牌**。
+ *
+ * startPlayerId = 本局发牌起点（2026-11-11 第四轮确认）：
+ *  - 空串：从座位 0 起（一场游戏的首局）
+ *  - 玩家 id：从该玩家起，之后仍按顺时针绕一圈
+ * 起点只决定「谁先拿到第一张牌」，与先手玩家、出牌顺序无关。
+ */
+export function dealCards(
+  deck: Card[],
+  players: PublicPlayer[],
+  startPlayerId = '',
+): Record<string, Card[]> {
   const hands: Record<string, Card[]> = {};
   for (const p of players) hands[p.id] = [];
   const cards = [...deck];
   const order = seatOrder(players);
+  const idx = startPlayerId ? order.findIndex((p) => p.id === startPlayerId) : -1;
+  // 起点玩家排到队首；找不到该玩家时兜底回座位 0
+  const start = idx > 0 ? [...order.slice(idx), ...order.slice(0, idx)] : order;
   for (let i = 0; i < GAME.CARDS_PER_PLAYER; i++) {
-    for (const p of order) {
+    for (const p of start) {
       const card = cards.shift();
       if (card) hands[p.id].push(card);
     }
   }
   return hands;
+}
+
+/**
+ * 非首局发牌起点（2026-11-11 第四轮确认）：
+ * 先发给上一局**输家中没有出完牌**的那个人；若有多人未出完，则在他们中随机一人。
+ * 随机用本局公开种子做确定性洗牌，保证局末验牌可复算、各端结果一致。
+ * remaining 为空时返回空串，兜底从座位 0 起。
+ */
+export function pickDealStarter(remaining: string[], seed: string): string {
+  if (remaining.length === 0) return '';
+  if (remaining.length === 1) return remaining[0];
+  return seededShuffle(remaining, seed + 'deal')[0];
 }
 
 /** 首局：手牌里持有方片3 的玩家 */
@@ -135,7 +161,10 @@ export function pickWindfallLeader(
   return previousActivePlayer(state, finishedPlayerId);
 }
 
-/** 本回合是否结束：除最后一手牌的玩家外，所有仍可出牌的人都 pass 了 */
+/**
+ * 本回合是否结束：**当前压制轮内**，除最后一手牌的玩家外所有仍可出牌的人都 pass 了。
+ * 有人压过时 engine.play 会清空 passedPlayerIds，开启新一轮，此处判定自动只针对新一轮。
+ */
 export function isTrickOver(state: Pick<FullState, 'players' | 'hands' | 'lastPlayerId' | 'passedPlayerIds'>): boolean {
   if (!state.lastPlayerId) return false;
   const active = state.players
@@ -167,6 +196,7 @@ export function settleRemainingPot(state: FullState): { team: TeamId | null; poi
   state.pot = [];
   state.currentPlay = null;
   state.passedPlayerIds = [];
+  state.trickCycle = 0;
   return { team, points };
 }
 

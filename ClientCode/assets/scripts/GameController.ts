@@ -145,7 +145,7 @@ export class GameController extends Component {
     }
     if (v.phase === 'playing' && v.turnPlayerId === this.myPlayerId) {
       actions.push('play');
-      if (v.currentPlay) actions.push('pass');
+      if (v.currentPlay && !v.passedPlayerIds.includes(this.myPlayerId)) actions.push('pass');
     }
     return actions;
   }
@@ -158,9 +158,15 @@ export class GameController extends Component {
     this.handView?.render(v.selfHand);
     if (this.statusLabel) {
       const turn = v.players.find((p) => p.id === v.turnPlayerId)?.nickname ?? '-';
+      // 发牌起点：空串代表首局从座位 0 起
+      const starter = v.dealStartPlayerId
+        ? v.players.find((p) => p.id === v.dealStartPlayerId)?.nickname
+        : v.players.find((p) => p.seat === 0)?.nickname;
       this.statusLabel.string =
         `第 ${v.roundNo} 局 · A ${v.teams.A.matchScore} : ${v.teams.B.matchScore} B · ` +
-        `我的手牌 ${v.selfHand.length} 张 · 轮到 ${turn} · 可操作：${this.availableActions.join('/') || '无'}` +
+        `起发 ${starter ?? '座位 0'} · 我的手牌 ${v.selfHand.length} 张 · 轮到 ${turn} · ` +
+        (v.phase === 'playing' && v.trickCycle > 0 ? `第 ${v.trickCycle} 轮 · ` : '') +
+        `可操作：${this.availableActions.join('/') || '无'}` +
         (this.lastEvent ? `\n${this.lastEvent}` : '');
     }
   }
