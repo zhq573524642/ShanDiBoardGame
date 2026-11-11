@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "experimentalDecorators": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "typings/cc.d.ts",
+    "assets/scripts/**/*.ts"
+  ]
+}

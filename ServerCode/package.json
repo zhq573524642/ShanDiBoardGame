@@ -1,0 +1,21 @@
+{
+  "name": "shandi-boardgame-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "山底五十K 云端权威服务，与 Cocos 客户端、近场房主共用 SharedCode 规则引擎",
+  "scripts": {
+    "sync": "node scripts/sync-shared.mjs",
+    "build": "npm run sync && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "smoke": "npm run build && node dist/smoke.js",
+    "typecheck:client": "tsc -p ../ClientCode/tsconfig.check.json"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2"
+  }
+}
